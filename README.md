@@ -192,6 +192,11 @@ Both commands run the same `stdio` MCP server. They do not open an HTTP port.
 Spider API used by the Sonic Pi GUI. Treat access to this MCP server as local
 code execution and local audio-device control.
 
+## License
+
+MIT License. You may use, copy, modify, publish, distribute, sublicense, and
+sell copies of this package, provided the license text is included.
+
 ## Packaging Notes
 
 The package is intentionally path-neutral:
