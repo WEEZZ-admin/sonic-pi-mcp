@@ -18,6 +18,11 @@ classifiers = [
   "Programming Language :: Python :: 3.13",
 ]
 
+[project.urls]
+Homepage = "https://github.com/WEEZZ-admin/sonic-pi-mcp"
+Repository = "https://github.com/WEEZZ-admin/sonic-pi-mcp"
+Issues = "https://github.com/WEEZZ-admin/sonic-pi-mcp/issues"
+
 [project.scripts]
 sonic-pi-mcp = "sonic_pi_mcp.server:main"
 
