@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import os
 import shutil
+import subprocess
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -66,6 +68,7 @@ def preflight_report(root_path: str | Path | None, config: Config) -> dict[str, 
         "Audio device access is verified only when Sonic Pi starts scsynth.",
         "If boot fails, check the scsynth log and the OS output device/permissions.",
     )
+    _check_windows_processes(checks)
 
     return {
         "ok": not any(item["status"] == "error" for item in checks),
@@ -171,6 +174,49 @@ def _check_writable_dir(
         _add_check(checks, name, "error", f"{path}: {exc}", fix)
         return
     _add_check(checks, name, "ok", str(path))
+
+
+def _check_windows_processes(checks: list[dict[str, str]]) -> None:
+    if sys.platform != "win32":
+        return
+    try:
+        result = subprocess.run(
+            ["tasklist", "/FO", "CSV", "/NH"],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=3,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        _add_check(
+            checks,
+            "windows_processes",
+            "warning",
+            f"Unable to inspect running Windows processes: {exc}",
+        )
+        return
+
+    watched = {"sonic-pi.exe", "scsynth.exe", "tau.exe"}
+    running = []
+    for line in result.stdout.splitlines():
+        if not line.startswith('"'):
+            continue
+        name = line.split('","', 1)[0].strip('"').lower()
+        if name in watched:
+            running.append(name)
+
+    if running:
+        _add_check(
+            checks,
+            "windows_processes",
+            "warning",
+            "Running Sonic Pi related processes: " + ", ".join(sorted(set(running))),
+            "Stop old Sonic Pi/MCP sessions before upgrading, deleting files, or diagnosing port locks.",
+        )
+    else:
+        _add_check(checks, "windows_processes", "ok", "No Sonic Pi related processes detected")
 
 
 def _recommendations(checks: list[dict[str, str]]) -> list[str]:

@@ -19,9 +19,13 @@ from sonic_pi_mcp.sonic.locator import find_sonic_pi_root
 from sonic_pi_mcp.sonic.logs import read_logs
 from sonic_pi_mcp.sonic.osc import OSCClient, OSCMessage, OSCUDPServer
 from sonic_pi_mcp.sonic.protocol import (
+    SPIDER_DELETE_RECORDING,
     SPIDER_PING,
+    SPIDER_SAVE_RECORDING,
     SPIDER_SAVE_AND_RUN_BUFFER,
+    SPIDER_START_RECORDING,
     SPIDER_STOP_ALL_JOBS,
+    SPIDER_STOP_RECORDING,
     SonicPorts,
 )
 
@@ -132,13 +136,7 @@ class SonicPiSession:
         buffer_name: str | None = None,
         collect_ms: int | None = None,
     ) -> dict[str, Any]:
-        file_path = Path(path).expanduser()
-        if not file_path.is_absolute():
-            file_path = Path.cwd() / file_path
-        file_path = file_path.resolve()
-        if not file_path.is_file():
-            raise SonicPiStateError(f"Sonic Pi code file not found: {file_path}")
-
+        file_path = self._resolve_code_path(path)
         buffer = buffer_name or file_path.stem or "mcp_file"
         result = self.run_code(
             f"run_file {self._sonic_path_literal(file_path)}",
@@ -148,6 +146,144 @@ class SonicPiSession:
         result["file_path"] = str(file_path)
         result["submitted_via"] = "run_file"
         return result
+
+    def start_recording(self, *, collect_ms: int | None = 500) -> dict[str, Any]:
+        ports = self._require_ready()
+        return self._send_spider_command(
+            ports,
+            SPIDER_START_RECORDING,
+            collect_ms=collect_ms,
+        )
+
+    def stop_recording(self, *, collect_ms: int | None = 1000) -> dict[str, Any]:
+        ports = self._require_ready()
+        return self._send_spider_command(
+            ports,
+            SPIDER_STOP_RECORDING,
+            collect_ms=collect_ms,
+        )
+
+    def save_recording(
+        self,
+        output_path: str,
+        *,
+        collect_ms: int | None = 1000,
+        wait_timeout: float = 30.0,
+    ) -> dict[str, Any]:
+        ports = self._require_ready()
+        output = self._resolve_output_path(output_path)
+        output.parent.mkdir(parents=True, exist_ok=True)
+
+        result = self._send_spider_command(
+            ports,
+            SPIDER_SAVE_RECORDING,
+            self._sonic_path(output),
+            collect_ms=collect_ms,
+        )
+        result.update(self._wait_for_output_file(output, timeout=wait_timeout))
+        return result
+
+    def delete_recording(self, *, collect_ms: int | None = 500) -> dict[str, Any]:
+        ports = self._require_ready()
+        return self._send_spider_command(
+            ports,
+            SPIDER_DELETE_RECORDING,
+            collect_ms=collect_ms,
+        )
+
+    def record_file(
+        self,
+        path: str,
+        output_path: str,
+        *,
+        duration_seconds: float,
+        bit_depth: int = 24,
+        buffer_name: str | None = None,
+        root_path: str | None = None,
+        no_inputs: bool = True,
+        overwrite: bool = False,
+        shutdown_after: bool = False,
+        save_timeout: float = 30.0,
+    ) -> dict[str, Any]:
+        if duration_seconds <= 0:
+            raise SonicPiStateError("duration_seconds must be greater than 0")
+        if bit_depth not in {8, 16, 24, 32}:
+            raise SonicPiStateError("bit_depth must be one of 8, 16, 24, or 32")
+
+        code_path = self._resolve_code_path(path)
+        output = self._resolve_output_path(output_path)
+        output.parent.mkdir(parents=True, exist_ok=True)
+        if output.exists():
+            if not overwrite:
+                raise SonicPiStateError(
+                    f"Output file already exists: {output}. Pass overwrite=true to replace it."
+                )
+            output.unlink()
+
+        started_here = self.status()["state"] != "ready"
+        steps: list[dict[str, Any]] = []
+        try:
+            if started_here:
+                steps.append(
+                    {
+                        "name": "start",
+                        "result": self.start(root_path=root_path, no_inputs=no_inputs),
+                    }
+                )
+
+            setup = self.run_code(
+                f"set_recording_bit_depth! {bit_depth}",
+                buffer_name="mcp_recording_setup",
+                collect_ms=500,
+            )
+            steps.append({"name": "set_bit_depth", "result": setup})
+            record_since = self.events.latest_seq
+            steps.append({"name": "start_recording", "result": self.start_recording(collect_ms=0)})
+            steps.append(
+                {
+                    "name": "play_file",
+                    "result": self.play_file(
+                        str(code_path),
+                        buffer_name=buffer_name or code_path.stem or "mcp_recording",
+                        collect_ms=0,
+                    ),
+                }
+            )
+
+            time.sleep(duration_seconds)
+            steps.append({"name": "stop_recording", "result": self.stop_recording(collect_ms=1000)})
+            steps.append({"name": "stop_all", "result": self.stop_all(collect_ms=800)})
+            save = self.save_recording(
+                str(output),
+                collect_ms=1000,
+                wait_timeout=save_timeout,
+            )
+            steps.append({"name": "save_recording", "result": save})
+
+            result: dict[str, Any] = {
+                "ok": bool(save.get("output_exists")),
+                "file_path": str(code_path),
+                "output_path": str(output),
+                "output_exists": output.exists(),
+                "output_size_bytes": output.stat().st_size if output.exists() else 0,
+                "duration_seconds": duration_seconds,
+                "bit_depth": bit_depth,
+                "started_session": started_here,
+                "since": record_since,
+                "events": [event.to_dict() for event in self.events.snapshot(since=record_since)],
+                "steps": steps,
+            }
+            if shutdown_after:
+                result["shutdown"] = self.shutdown()
+            return result
+        except Exception:
+            try:
+                if self.status()["state"] == "ready":
+                    self.stop_all(collect_ms=500)
+            finally:
+                if shutdown_after and self.status()["state"] != "stopped":
+                    self.shutdown()
+            raise
 
     def stop_all(self, *, collect_ms: int | None = 500) -> dict[str, Any]:
         ports = self._require_ready()
@@ -247,6 +383,67 @@ class SonicPiSession:
         code_path.write_text(code, encoding="utf-8")
         return f"run_file {self._sonic_path_literal(code_path)}"
 
+    def _send_spider_command(
+        self,
+        ports: SonicPorts,
+        address: str,
+        *args: Any,
+        collect_ms: int | None,
+    ) -> dict[str, Any]:
+        since = self.events.latest_seq
+        self.osc_client.send(ports.gui_send_to_spider, address, ports.token, *args)
+        wait_s = max(0, collect_ms or 0) / 1000.0
+        events = self.events.collect_for(wait_s, since=since)
+        return {
+            "ok": True,
+            "address": address,
+            "since": since,
+            "events": [event.to_dict() for event in events],
+        }
+
+    def _resolve_code_path(self, path: str) -> Path:
+        code_path = Path(path).expanduser()
+        if not code_path.is_absolute():
+            code_path = Path.cwd() / code_path
+        code_path = code_path.resolve()
+        if not code_path.is_file():
+            raise SonicPiStateError(f"Sonic Pi code file not found: {code_path}")
+        return code_path
+
+    def _resolve_output_path(self, path: str) -> Path:
+        output = Path(path).expanduser()
+        if not output.is_absolute():
+            output = Path.cwd() / output
+        return output.resolve()
+
+    def _wait_for_output_file(self, path: Path, *, timeout: float) -> dict[str, Any]:
+        deadline = time.monotonic() + max(0.0, timeout)
+        last_size = -1
+        stable_since: float | None = None
+        while time.monotonic() <= deadline:
+            if path.is_file():
+                size = path.stat().st_size
+                now = time.monotonic()
+                if size > 0 and size == last_size:
+                    if stable_since is None:
+                        stable_since = now
+                    elif now - stable_since >= 0.5:
+                        return {
+                            "output_path": str(path),
+                            "output_exists": True,
+                            "output_size_bytes": size,
+                        }
+                else:
+                    stable_since = None
+                    last_size = size
+            time.sleep(0.1)
+        return {
+            "output_path": str(path),
+            "output_exists": path.is_file(),
+            "output_size_bytes": path.stat().st_size if path.is_file() else 0,
+            "warning": f"Timed out waiting for recording file to settle: {path}",
+        }
+
     def _startup_error_with_diagnostics(
         self,
         exc: Exception,
@@ -271,9 +468,12 @@ class SonicPiSession:
 
     @staticmethod
     def _sonic_path_literal(path: Path) -> str:
-        sonic_path = str(path).replace("\\", "/")
-        escaped_path = sonic_path.replace('"', '\\"')
+        escaped_path = SonicPiSession._sonic_path(path).replace('"', '\\"')
         return f'"{escaped_path}"'
+
+    @staticmethod
+    def _sonic_path(path: Path) -> str:
+        return str(path).replace("\\", "/")
 
     def _handle_osc(self, message: OSCMessage, _addr: tuple[str, int]) -> None:
         address = message.address

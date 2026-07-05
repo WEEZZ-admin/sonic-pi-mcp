@@ -141,6 +141,12 @@ Both commands run the same `stdio` MCP server. They do not open an HTTP port.
 - `sonic_preflight(root_path?)`
 - `sonic_run_code(code, buffer_name?, collect_ms?)`
 - `sonic_play_file(path, buffer_name?, collect_ms?)`
+- `sonic_start_recording(collect_ms?)`
+- `sonic_stop_recording(collect_ms?)`
+- `sonic_save_recording(output_path, collect_ms?, wait_timeout?)`
+- `sonic_delete_recording(collect_ms?)`
+- `sonic_record_file(path, output_path, duration_seconds, bit_depth?, buffer_name?,
+  root_path?, no_inputs?, overwrite?, shutdown_after?, save_timeout?)`
 - `sonic_stop(collect_ms?)`
 - `sonic_shutdown()`
 - `sonic_read_events(since?, limit?)`
@@ -161,10 +167,12 @@ Both commands run the same `stdio` MCP server. They do not open an HTTP port.
    `sonic_list_fx` to stay within the user's installed Sonic Pi version.
 5. Send music with `sonic_run_code(code, buffer_name, collect_ms)` or run a
    local `.rb` file with `sonic_play_file(path, buffer_name, collect_ms)`.
-6. Inspect returned events for `syntax_error`, `runtime_error`, or missing
+6. Export a fixed-duration WAV with `sonic_record_file(path, output_path,
+   duration_seconds, bit_depth=24)` when the user asks for a rendered file.
+7. Inspect returned events for `syntax_error`, `runtime_error`, or missing
    `Defining fn :live_loop_...` messages.
-7. Call `sonic_stop()` before replacing a long-running composition.
-8. Call `sonic_shutdown()` when the session is no longer needed.
+8. Call `sonic_stop()` before replacing a long-running composition.
+9. Call `sonic_shutdown()` when the session is no longer needed.
 
 ## Security
 

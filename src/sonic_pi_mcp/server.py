@@ -57,6 +57,66 @@ def sonic_play_file(
 
 
 @mcp.tool()
+def sonic_start_recording(collect_ms: int | None = 500) -> dict[str, Any]:
+    """Start Sonic Pi's built-in WAV recorder."""
+    return session.start_recording(collect_ms=collect_ms)
+
+
+@mcp.tool()
+def sonic_stop_recording(collect_ms: int | None = 1000) -> dict[str, Any]:
+    """Stop Sonic Pi's built-in WAV recorder."""
+    return session.stop_recording(collect_ms=collect_ms)
+
+
+@mcp.tool()
+def sonic_save_recording(
+    output_path: str,
+    collect_ms: int | None = 1000,
+    wait_timeout: float = 30.0,
+) -> dict[str, Any]:
+    """Save the current Sonic Pi recording to a WAV file."""
+    return session.save_recording(
+        output_path,
+        collect_ms=collect_ms,
+        wait_timeout=wait_timeout,
+    )
+
+
+@mcp.tool()
+def sonic_delete_recording(collect_ms: int | None = 500) -> dict[str, Any]:
+    """Delete Sonic Pi's temporary recording."""
+    return session.delete_recording(collect_ms=collect_ms)
+
+
+@mcp.tool()
+def sonic_record_file(
+    path: str,
+    output_path: str,
+    duration_seconds: float,
+    bit_depth: int = 24,
+    buffer_name: str | None = None,
+    root_path: str | None = None,
+    no_inputs: bool = True,
+    overwrite: bool = False,
+    shutdown_after: bool = False,
+    save_timeout: float = 30.0,
+) -> dict[str, Any]:
+    """Start Sonic Pi if needed, record a .rb file for a fixed duration, and save WAV output."""
+    return session.record_file(
+        path,
+        output_path,
+        duration_seconds=duration_seconds,
+        bit_depth=bit_depth,
+        buffer_name=buffer_name,
+        root_path=root_path,
+        no_inputs=no_inputs,
+        overwrite=overwrite,
+        shutdown_after=shutdown_after,
+        save_timeout=save_timeout,
+    )
+
+
+@mcp.tool()
 def sonic_stop(collect_ms: int | None = 500) -> dict[str, Any]:
     """Stop all running Sonic Pi jobs."""
     return session.stop_all(collect_ms=collect_ms)
