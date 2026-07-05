@@ -21,7 +21,7 @@ MCP client environment unless you pass `root_path` to `sonic_start`.
 
 ## Install
 
-From PyPI, after the package is published:
+From PyPI:
 
 ```bash
 pip install sonic-pi-mcp
@@ -48,35 +48,6 @@ pip install dist/sonic_pi_mcp-0.1.0-py3-none-any.whl
 The wheel only contains the Python package under `src/sonic_pi_mcp`. Generated
 runtime files, exported audio, examples, tests, and local scripts are excluded
 from distribution.
-
-## Publish to PyPI
-
-This repository is prepared for PyPI Trusted Publishing through GitHub Actions.
-No PyPI API token should be stored in the repository.
-
-Configure a PyPI Trusted Publisher for the package:
-
-```text
-PyPI project name: sonic-pi-mcp
-GitHub owner: WEEZZ-admin
-GitHub repository: sonic-pi-mcp
-Workflow name: publish.yml
-Environment name: pypi
-```
-
-Then publish a GitHub Release. The workflow in `.github/workflows/publish.yml`
-will build the wheel/sdist and upload them to PyPI.
-
-Before each release, update `version` in `pyproject.toml`. PyPI does not allow
-re-uploading the same version.
-
-Recommended local preflight:
-
-```bash
-python -m pip install --upgrade build twine
-python -m build
-python -m twine check dist/*
-```
 
 ## Configuration
 
