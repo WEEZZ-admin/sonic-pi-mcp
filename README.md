@@ -42,7 +42,7 @@ python -m build
 Then install the wheel on another machine:
 
 ```bash
-pip install dist/sonic_pi_mcp-0.1.0-py3-none-any.whl
+pip install dist/sonic_pi_mcp-*.whl
 ```
 
 The wheel only contains the Python package under `src/sonic_pi_mcp`. Generated
