@@ -4,6 +4,7 @@ import queue
 import subprocess
 import threading
 import time
+from collections import deque
 from pathlib import Path
 
 from sonic_pi_mcp.config import Config
@@ -20,6 +21,8 @@ class SonicDaemon:
         self.ports: SonicPorts | None = None
         self.process: subprocess.Popen[str] | None = None
         self._stdout_queue: queue.Queue[str] = queue.Queue()
+        self._stdout_lines: deque[str] = deque(maxlen=500)
+        self._stdout_lock = threading.Lock()
         self._stdout_thread: threading.Thread | None = None
         self._keepalive_thread: threading.Thread | None = None
         self._stop_keepalive = threading.Event()
@@ -82,9 +85,18 @@ class SonicDaemon:
         self._client.close()
         self.process = None
 
+    def recent_output(self, tail: int = 80) -> str:
+        with self._stdout_lock:
+            lines = list(self._stdout_lines)
+        if tail > 0:
+            lines = lines[-tail:]
+        return "".join(lines)
+
     def _read_stdout(self) -> None:
         assert self.process and self.process.stdout
         for line in self.process.stdout:
+            with self._stdout_lock:
+                self._stdout_lines.append(line)
             self._stdout_queue.put(line)
 
     def _wait_for_ports(self, timeout: float) -> SonicPorts:
@@ -125,4 +137,3 @@ class SonicDaemon:
                 self._client.send(self.ports.daemon, DAEMON_KEEP_ALIVE, self.ports.token)
             except OSError:
                 return
-

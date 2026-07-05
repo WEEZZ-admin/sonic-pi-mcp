@@ -31,6 +31,12 @@ def sonic_status() -> dict[str, Any]:
 
 
 @mcp.tool()
+def sonic_preflight(root_path: str | None = None) -> dict[str, Any]:
+    """Check whether the local environment looks ready to start Sonic Pi."""
+    return session.preflight(root_path=root_path)
+
+
+@mcp.tool()
 def sonic_run_code(
     code: str,
     buffer_name: str | None = None,
@@ -38,6 +44,16 @@ def sonic_run_code(
 ) -> dict[str, Any]:
     """Run Sonic Pi code in the managed runtime and return newly collected events."""
     return session.run_code(code, buffer_name=buffer_name, collect_ms=collect_ms)
+
+
+@mcp.tool()
+def sonic_play_file(
+    path: str,
+    buffer_name: str | None = None,
+    collect_ms: int | None = None,
+) -> dict[str, Any]:
+    """Run a local Sonic Pi .rb file in the managed runtime."""
+    return session.play_file(path, buffer_name=buffer_name, collect_ms=collect_ms)
 
 
 @mcp.tool()

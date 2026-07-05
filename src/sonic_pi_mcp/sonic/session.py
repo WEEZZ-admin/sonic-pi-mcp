@@ -6,8 +6,14 @@ from pathlib import Path
 from typing import Any
 
 from sonic_pi_mcp.config import Config
-from sonic_pi_mcp.errors import SonicPiBootError, SonicPiStateError
+from sonic_pi_mcp.errors import (
+    SonicPiBootError,
+    SonicPiMcpError,
+    SonicPiNotFoundError,
+    SonicPiStateError,
+)
 from sonic_pi_mcp.sonic.daemon import SonicDaemon
+from sonic_pi_mcp.sonic.diagnostics import preflight_report, startup_failure_report
 from sonic_pi_mcp.sonic.events import EventBuffer
 from sonic_pi_mcp.sonic.locator import find_sonic_pi_root
 from sonic_pi_mcp.sonic.logs import read_logs
@@ -34,6 +40,8 @@ class SonicPiSession:
         self._lock = threading.RLock()
 
     def start(self, root_path: str | None = None, *, no_inputs: bool = False) -> dict[str, Any]:
+        root: Path | None = None
+        daemon: SonicDaemon | None = None
         with self._lock:
             if self.state in {"starting", "ready"}:
                 return self.status()
@@ -63,11 +71,17 @@ class SonicPiSession:
             with self._lock:
                 self.state = "ready"
             return self.status()
-        except Exception:
+        except Exception as exc:
+            daemon_output = daemon.recent_output() if daemon else None
             self.shutdown()
             with self._lock:
                 self.state = "error"
-            raise
+            raise self._startup_error_with_diagnostics(
+                exc,
+                root_path=root_path,
+                resolved_root=root,
+                daemon_output=daemon_output,
+            ) from exc
 
     def status(self) -> dict[str, Any]:
         with self._lock:
@@ -78,6 +92,9 @@ class SonicPiSession:
                 "started_at": self.started_at,
                 "latest_event_seq": self.events.latest_seq,
             }
+
+    def preflight(self, root_path: str | None = None) -> dict[str, Any]:
+        return preflight_report(root_path, self.config)
 
     def run_code(
         self,
@@ -107,6 +124,30 @@ class SonicPiSession:
             "since": since,
             "events": [event.to_dict() for event in events],
         }
+
+    def play_file(
+        self,
+        path: str,
+        *,
+        buffer_name: str | None = None,
+        collect_ms: int | None = None,
+    ) -> dict[str, Any]:
+        file_path = Path(path).expanduser()
+        if not file_path.is_absolute():
+            file_path = Path.cwd() / file_path
+        file_path = file_path.resolve()
+        if not file_path.is_file():
+            raise SonicPiStateError(f"Sonic Pi code file not found: {file_path}")
+
+        buffer = buffer_name or file_path.stem or "mcp_file"
+        result = self.run_code(
+            f"run_file {self._sonic_path_literal(file_path)}",
+            buffer_name=buffer,
+            collect_ms=collect_ms,
+        )
+        result["file_path"] = str(file_path)
+        result["submitted_via"] = "run_file"
+        return result
 
     def stop_all(self, *, collect_ms: int | None = 500) -> dict[str, Any]:
         ports = self._require_ready()
@@ -204,9 +245,35 @@ class SonicPiSession:
         run_dir.mkdir(parents=True, exist_ok=True)
         code_path = run_dir / f"{safe_name}.rb"
         code_path.write_text(code, encoding="utf-8")
-        sonic_path = str(code_path).replace("\\", "/")
-        escaped_path = sonic_path.replace("\\", "\\\\").replace('"', '\\"')
-        return f'run_file "{escaped_path}"'
+        return f"run_file {self._sonic_path_literal(code_path)}"
+
+    def _startup_error_with_diagnostics(
+        self,
+        exc: Exception,
+        *,
+        root_path: str | None,
+        resolved_root: Path | None,
+        daemon_output: str | None,
+    ) -> SonicPiMcpError:
+        report = startup_failure_report(
+            exc,
+            root_path=root_path,
+            config=self.config,
+            resolved_root=resolved_root,
+            daemon_output=daemon_output,
+        )
+        message = f"{exc}\n\n{report}"
+        if isinstance(exc, SonicPiNotFoundError):
+            return SonicPiNotFoundError(message)
+        if isinstance(exc, SonicPiStateError):
+            return SonicPiStateError(message)
+        return SonicPiBootError(message)
+
+    @staticmethod
+    def _sonic_path_literal(path: Path) -> str:
+        sonic_path = str(path).replace("\\", "/")
+        escaped_path = sonic_path.replace('"', '\\"')
+        return f'"{escaped_path}"'
 
     def _handle_osc(self, message: OSCMessage, _addr: tuple[str, int]) -> None:
         address = message.address

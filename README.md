@@ -116,6 +116,10 @@ If your client does not inherit shell environment variables, put the variables
 in the client config. Avoid relying on the terminal profile of the user who
 installed the package.
 
+If startup fails, the error includes preflight results, recent daemon output,
+Sonic Pi log tails, and likely fixes for common path, permission, and audio
+backend issues.
+
 ## Run Manually
 
 ```bash
@@ -134,7 +138,9 @@ Both commands run the same `stdio` MCP server. They do not open an HTTP port.
 
 - `sonic_start(root_path?, no_inputs?)`
 - `sonic_status()`
+- `sonic_preflight(root_path?)`
 - `sonic_run_code(code, buffer_name?, collect_ms?)`
+- `sonic_play_file(path, buffer_name?, collect_ms?)`
 - `sonic_stop(collect_ms?)`
 - `sonic_shutdown()`
 - `sonic_read_events(since?, limit?)`
@@ -147,15 +153,18 @@ Both commands run the same `stdio` MCP server. They do not open an HTTP port.
 
 ## Suggested Agent Workflow
 
-1. Call `sonic_start(no_inputs=true)` unless the user needs audio input.
-2. Call `sonic_status()` and confirm `state` is `ready`.
-3. Use `sonic_search_docs`, `sonic_list_samples`, `sonic_list_synths`, and
+1. Call `sonic_preflight()` when setting up a new machine or after a boot
+   failure.
+2. Call `sonic_start(no_inputs=true)` unless the user needs audio input.
+3. Call `sonic_status()` and confirm `state` is `ready`.
+4. Use `sonic_search_docs`, `sonic_list_samples`, `sonic_list_synths`, and
    `sonic_list_fx` to stay within the user's installed Sonic Pi version.
-4. Send music with `sonic_run_code(code, buffer_name, collect_ms)`.
-5. Inspect returned events for `syntax_error`, `runtime_error`, or missing
+5. Send music with `sonic_run_code(code, buffer_name, collect_ms)` or run a
+   local `.rb` file with `sonic_play_file(path, buffer_name, collect_ms)`.
+6. Inspect returned events for `syntax_error`, `runtime_error`, or missing
    `Defining fn :live_loop_...` messages.
-6. Call `sonic_stop()` before replacing a long-running composition.
-7. Call `sonic_shutdown()` when the session is no longer needed.
+7. Call `sonic_stop()` before replacing a long-running composition.
+8. Call `sonic_shutdown()` when the session is no longer needed.
 
 ## Security
 
