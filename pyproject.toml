@@ -1,0 +1,60 @@
+[project]
+name = "sonic-pi-mcp"
+version = "0.1.0"
+description = "MCP server for controlling a local Sonic Pi runtime"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+  "mcp>=1.28.1,<2.0.0",
+]
+keywords = ["mcp", "sonic-pi", "music", "osc", "stdio"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Environment :: Console",
+  "Intended Audience :: Developers",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+]
+
+[project.scripts]
+sonic-pi-mcp = "sonic_pi_mcp.server:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build]
+exclude = [
+  "/.agents",
+  "/.codex",
+  "/.git",
+  "/.runtime",
+  "/assets",
+  "/dist",
+  "/exports",
+  "/examples",
+  "/scripts",
+  "/tests",
+  "**/__pycache__",
+  "**/*.pyc",
+  "**/*.wav",
+  "**/*.flac",
+  "**/*.aiff",
+  "**/*.aif",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/sonic_pi_mcp"]
+
+[tool.hatch.build.targets.sdist]
+include = [
+  "/src/sonic_pi_mcp",
+  "/README.md",
+  "/pyproject.toml",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"

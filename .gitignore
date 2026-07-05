@@ -1,0 +1,35 @@
+# Local runtime state and generated media
+.runtime/
+exports/
+*.wav
+*.wave
+*.aiff
+*.aif
+*.flac
+
+# Local composition/playback helpers excluded from the pip package
+examples/
+scripts/
+tests/
+
+# Python caches and virtual environments
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.venv/
+venv/
+env/
+
+# Build artifacts
+dist/
+build/
+*.egg-info/
+
+# OS/editor noise
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
